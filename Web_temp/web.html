@@ -98,7 +98,7 @@ body.noanim *{animation:none!important;transition:none!important}
 <section class="pg" id="p-profile"><div class="grid gm"><div class="card banner-card"><div class="hd"><h2>🖼️ Account Profile Banner</h2><span class="pill ok" id="banner_status">Ready</span></div><img class="ban" id="banimg" alt="Generated account profile banner" hidden><div class="ban" id="banph">✨ Select an account to auto-detect its UID and create the profile banner.</div>
 <div class="fr mt"><div><label>🎮 Target Account</label><select id="pnode"></select></div><div><label>🆔 Player UID</label><input id="puid" inputmode="numeric" placeholder="Enter player UID"></div></div>
 <label class="row"><input type="checkbox" id="pauto" checked> ⚡ Auto-detect UID from selected account</label>
-<div class="row mt"><button id="pgen">✨ Generate Banner</button></div><p class="hint mt">📐 Preview keeps the original banner ratio (1536 × 677) without cropping.</p></div>
+<div class="row mt"><button id="pgen">✨ Generate Banner</button><button class="s" id="pcopy" type="button">Copy Banner URL</button><button class="s" id="pdl" type="button">Download Banner</button></div><p class="hint mt">📐 Preview keeps the original banner ratio (1536 × 677) without cropping.</p></div>
 <div class="card"><h2>👤 Profile Settings</h2><label>Display name</label><input id="pname" maxlength="24" placeholder="ZX OM FF"><label>Role</label><input id="prole" maxlength="24" placeholder="Administrator"><label>🎨 Premium colour palette</label><div class="sw palette"><button data-ac="#00D9FF" style="background:#00D9FF" aria-label="Ice cyan" title="Ice Cyan"></button><button data-ac="#8B5CF6" style="background:#8B5CF6" aria-label="Royal violet" title="Royal Violet"></button><button data-ac="#3B82F6" style="background:#3B82F6" aria-label="Electric blue" title="Electric Blue"></button><button data-ac="#10B981" style="background:#10B981" aria-label="Emerald" title="Emerald"></button><button data-ac="#F59E0B" style="background:#F59E0B" aria-label="Amber" title="Amber"></button><button data-ac="#F43F8E" style="background:#F43F8E" aria-label="Rose pink" title="Rose Pink"></button><button data-ac="#FB7185" style="background:#FB7185" aria-label="Coral" title="Coral"></button><button data-ac="#A3E635" style="background:#A3E635" aria-label="Lime" title="Lime"></button></div><p class="hint mt">💾 Profile name, role and accent colour are saved in this browser.</p></div></div></section>
 
 <section class="pg" id="p-settings"><div class="grid g2">
@@ -106,6 +106,7 @@ body.noanim *{animation:none!important;transition:none!important}
 <label>🎨 Accent palette</label><div class="sw palette"><button data-ac="#00D9FF" style="background:#00D9FF" aria-label="Ice cyan"></button><button data-ac="#8B5CF6" style="background:#8B5CF6" aria-label="Royal violet"></button><button data-ac="#3B82F6" style="background:#3B82F6" aria-label="Electric blue"></button><button data-ac="#10B981" style="background:#10B981" aria-label="Emerald"></button><button data-ac="#F59E0B" style="background:#F59E0B" aria-label="Amber"></button><button data-ac="#F43F8E" style="background:#F43F8E" aria-label="Rose pink"></button><button data-ac="#FB7185" style="background:#FB7185" aria-label="Coral"></button><button data-ac="#A3E635" style="background:#A3E635" aria-label="Lime"></button></div>
 <label class="row mt"><input type="checkbox" id="sanim" checked> Enable animations</label><label class="row"><input type="checkbox" id="sdash" checked> Show secondary stats on Command Core</label>
 <div class="row mt"><button id="ssave">Save</button><button class="s" id="sclr">Clear temporary data</button></div></div>
+<div class="card"><h2>Manage accounts.json</h2><p class="hint">Upload a file named accounts.json to merge valid accounts. Delete removes only the active accounts.json file; the archived account backup is left untouched.</p><div class="row mt"><input type="file" id="accounts_json_file" accept=".json,application/json"><button id="accounts_json_upload">Upload Accounts.json</button><button class="d" id="accounts_json_delete">Delete accounts.json</button></div><div class="res" id="accounts_json_result" aria-live="polite"></div></div>
 <div class="card"><h2>Change password</h2><p class="hint">Verified and stored by the backend.</p><label>Authorization key</label><input id="pwkey" type="password" placeholder="Enter authorization key" autocomplete="off"><label>Current password</label><input id="pw0" type="password" autocomplete="current-password"><label>New password</label><input id="pw1" type="password" autocomplete="new-password"><label>Repeat new password</label><input id="pw2" type="password" autocomplete="new-password"><button id="pwgo">Change password</button><div class="res" id="pwres"></div></div>
 <div class="card"><h2>System health</h2><div id="health" class="hint"></div></div>
 <div class="card"><h2>Backup</h2><p class="hint">Export Target Node data and browser settings as JSON, or validate and restore a backup.</p><div class="row"><button id="bexp">Export backup</button><button class="s" id="bimp">Import backup</button><input type="file" id="bfile" accept=".json" hidden></div><div class="res" id="bres"></div></div>
@@ -278,4 +279,37 @@ setInterval(()=>{$('clock').textContent=new Date().toLocaleTimeString()},1000);$
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('cm').classList.remove('show');$('dm').classList.remove('show')}});
 startApp();setTimeout(()=>$('boot').classList.add('off'),2500);
 
+
+/* Upload accounts.json */
+$('accounts_json_upload').onclick=async()=>{
+  const file=$('accounts_json_file').files[0];
+  const out=$('accounts_json_result');
+  try{
+    if(!file) throw Error('Please choose accounts.json first.');
+    if(file.name.toLowerCase()!=='accounts.json') throw Error('File must be named accounts.json.');
+    const form=new FormData(); form.append('file',file,file.name);
+    const response=await fetch('/api/accounts/upload',{method:'POST',credentials:'same-origin',body:form});
+    const result=await response.json().catch(()=>({error:'Invalid server response'}));
+    if(response.status===401){showLogin();throw Error('Session expired. Please log in.');}
+    if(!response.ok) throw Error(result.error||'Upload failed.');
+    out.textContent=result.message||'Upload complete.';
+    toast(result.message||'Accounts uploaded.','ok');
+    $('accounts_json_file').value='';
+    await loadStats();
+  }catch(e){out.textContent=e.message;toast(e.message,'err');}
+};
+
+$('accounts_json_delete').onclick=async()=>{
+  const out=$('accounts_json_result');
+  if(!confirm('Delete the active accounts.json file? This cannot be undone. The archived account backup will remain.')) return;
+  try{
+    const response=await fetch('/api/accounts/delete-file',{method:'POST',credentials:'same-origin'});
+    const result=await response.json().catch(()=>({error:'Invalid server response'}));
+    if(response.status===401){showLogin();throw Error('Session expired. Please log in.');}
+    if(!response.ok) throw Error(result.error||'Delete failed.');
+    out.textContent=result.message||'accounts.json deleted.';
+    toast(result.message||'accounts.json deleted.','ok');
+    await loadStats();
+  }catch(e){out.textContent=e.message;toast(e.message,'err');}
+};
 </script></body></html>
