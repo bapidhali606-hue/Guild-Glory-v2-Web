@@ -1,0 +1,21 @@
+ZX OM FF - GLORY WEB FIX NOTES
+
+Guild data fixes:
+1. Corrected guild glory parsing: data.proto defines `xp` as field 39; field 36 is rank.
+2. Guild name, level, member total, online count and leader now come from guild_details.
+3. Both member_list and members protobuf arrays are parsed and de-duplicated.
+4. Guild API wrappers such as api_response.clan_basic_info and data/result wrappers are normalized.
+5. Preview always requests fresh guild info rather than returning stale cached values.
+6. Refresh no longer displays a previous guild's live data when the selected guild changes.
+7. Missing API fields are shown as unavailable rather than fabricated zero values.
+
+Runtime and privacy:
+1. Local default dashboard address: http://127.0.0.1:25086
+2. Hosting platforms can supply PORT; the app binds to 0.0.0.0 only when PORT is supplied.
+3. Account-stat responses omit access tokens, passwords and login payload secrets.
+4. Keep accounts.json, accounts_archive.json and token_cache.json private. Do not upload or share this ZIP publicly.
+
+Verification:
+- Python syntax compilation passed for the project's Python modules.
+- Synthetic protobuf test passed for XP field, guild metadata, and merged roster parsing.
+- Live game/API calls were not possible in this offline build environment. Runtime results still depend on valid account credentials and the upstream APIs being online.
