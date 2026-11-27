@@ -27,7 +27,7 @@ from dashboard_server import bot_state, start_web_dashboard
 
 # ═══════════════════════════ CONFIG ═══════════════════════════
 WEB_HOST = os.environ.get("WEB_HOST", "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1")
-WEB_PORT = int(os.environ.get("PORT", os.environ.get("WEB_PORT", "25079")))
+WEB_PORT = int(os.environ.get("PORT", os.environ.get("WEB_PORT", "25089")))
 ACCOUNTS_FILE = "accounts.json"
 TOKEN_CACHE_FILE = "token_cache.json"
 DEVICES_FILE = "devices.json"

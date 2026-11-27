@@ -1023,6 +1023,86 @@ async def _join_new_account_to_selected_guild(uid: str, password: str):
         bot_state.log(f"UID {uid}: Guild join request failed | {exc}", "error", uid)
 
 
+async def handle_upload_accounts_json(request: web.Request) -> web.Response:
+    """Validate and merge an uploaded accounts.json without exposing its contents."""
+    try:
+        reader = await request.multipart()
+        part = await reader.next()
+        if part is None or part.name != "file":
+            return web.json_response({"status": "error", "error": "Choose an accounts.json file."}, status=400)
+        filename = os.path.basename(part.filename or "")
+        if filename.lower() != "accounts.json":
+            return web.json_response({"status": "error", "error": "File must be named accounts.json."}, status=400)
+        raw = await part.read(decode=False)
+        if len(raw) > 2 * 1024 * 1024:
+            return web.json_response({"status": "error", "error": "File is too large (maximum 2 MB)."}, status=413)
+        try:
+            uploaded = json.loads(raw.decode("utf-8-sig"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return web.json_response({"status": "error", "error": "Invalid JSON file."}, status=400)
+        if not isinstance(uploaded, list):
+            return web.json_response({"status": "error", "error": "JSON must contain a list of account objects."}, status=400)
+
+        clean = []
+        for item in uploaded:
+            if not isinstance(item, dict):
+                return web.json_response({"status": "error", "error": "Every account must be a JSON object."}, status=400)
+            uid, password, token = str(item.get("uid", "")).strip(), str(item.get("password", "")).strip(), str(item.get("token", "")).strip()
+            if uid and password:
+                clean.append({"uid": uid, "password": password})
+            elif token:
+                clean.append({"token": token})
+            else:
+                return web.json_response({"status": "error", "error": "Each account needs UID + password, or a token."}, status=400)
+        if not clean:
+            return web.json_response({"status": "error", "error": "No accounts found in the JSON file."}, status=400)
+
+        accounts_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "accounts.json")
+        existing = _read_json_list(accounts_file)
+        by_key = {}
+        for acc in existing:
+            if isinstance(acc, dict):
+                key = ("uid", str(acc.get("uid", "")).strip()) if acc.get("uid") else ("token", str(acc.get("token", "")).strip())
+                if key[1]: by_key[key] = acc
+        added = 0
+        for acc in clean:
+            key = ("uid", acc["uid"]) if "uid" in acc else ("token", acc["token"])
+            if key not in by_key:
+                by_key[key] = acc
+                added += 1
+        merged = list(by_key.values())
+        _write_json_atomic(accounts_file, merged)
+        _archive_accounts()
+
+        callback = bot_state.refresh_callbacks.get("on_account_added")
+        if callback:
+            async def start_imported_accounts():
+                for acc in clean:
+                    try:
+                        await callback(acc)
+                    except Exception as exc:
+                        bot_state.log(f"Imported account could not be started: {exc}", "warning")
+                    await asyncio.sleep(0.25)
+            asyncio.create_task(start_imported_accounts())
+        bot_state.log(f"accounts.json imported: {added} new account(s)", "success")
+        return web.json_response({"status": "ok", "added": added, "total": len(merged), "message": f"Import complete: {added} new account(s) added."})
+    except Exception as exc:
+        return web.json_response({"status": "error", "error": str(exc)}, status=500)
+
+
+async def handle_delete_accounts_json(request: web.Request) -> web.Response:
+    """Delete the accounts.json file only; leave archived accounts untouched."""
+    try:
+        accounts_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "accounts.json")
+        if not os.path.isfile(accounts_file):
+            return web.json_response({"status": "ok", "message": "accounts.json does not exist."})
+        os.remove(accounts_file)
+        bot_state.log("accounts.json file deleted from dashboard", "warning")
+        return web.json_response({"status": "ok", "message": "accounts.json deleted. The account archive was not changed."})
+    except Exception as exc:
+        return web.json_response({"status": "error", "error": str(exc)}, status=500)
+
+
 async def handle_add_account(request: web.Request) -> web.Response:
     try:
         data = await request.json()
@@ -1512,6 +1592,8 @@ async def start_web_dashboard(host: str = "0.0.0.0", port: int = 5000):
     app.router.add_get("/api/stats", handle_get_stats)
     app.router.add_get("/api/logs", handle_api_logs)
     app.router.add_post("/api/account/add", handle_add_account)
+    app.router.add_post("/api/accounts/upload", handle_upload_accounts_json)
+    app.router.add_post("/api/accounts/delete-file", handle_delete_accounts_json)
     app.router.add_post("/api/accounts/old/activate", handle_activate_old)
     app.router.add_post("/api/account/delete", handle_delete_account)
     app.router.add_post("/api/account/refresh", handle_refresh_account)

@@ -1,0 +1,8 @@
+Glory WEB persistence update
+
+- Updated Web_temp/web.html with same-browser remember-device convenience behavior.
+- Logout only ends the current UI session; it does not delete accounts.json, accounts_archive.json, profile, settings, or history.
+- dashboard_server.py already archives account entries from accounts.json to accounts_archive.json at startup and when archive helpers run.
+- Keep accounts.json and accounts_archive.json in the project folder and include them in backups.
+- Do not use the dashboard's Delete accounts.json action unless you intentionally want to remove the active account list.
+- Browser local storage can be cleared by the browser/user; this is not a secure server-issued trusted-device token.
