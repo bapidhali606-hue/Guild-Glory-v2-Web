@@ -98,7 +98,7 @@ body.noanim *{animation:none!important;transition:none!important}
 <section class="pg" id="p-profile"><div class="grid gm"><div class="card banner-card"><div class="hd"><h2>🖼️ Account Profile Banner</h2><span class="pill ok" id="banner_status">Ready</span></div><img class="ban" id="banimg" alt="Generated account profile banner" hidden><div class="ban" id="banph">✨ Select an account to auto-detect its UID and create the profile banner.</div>
 <div class="fr mt"><div><label>🎮 Target Account</label><select id="pnode"></select></div><div><label>🆔 Player UID</label><input id="puid" inputmode="numeric" placeholder="Enter player UID"></div></div>
 <label class="row"><input type="checkbox" id="pauto" checked> ⚡ Auto-detect UID from selected account</label>
-<div class="row mt"><button id="pgen">✨ Generate Banner</button></div><p class="hint mt">📐 Preview keeps the original banner ratio (1536 × 677) without cropping.</p></div>
+<div class="row mt"><button id="pgen">✨ Generate Banner</button><button class="s" id="pcopy" type="button">Copy Banner URL</button><button class="s" id="pdl" type="button">Download Banner</button></div><p class="hint mt">📐 Preview keeps the original banner ratio (1536 × 677) without cropping.</p></div>
 <div class="card"><h2>👤 Profile Settings</h2><label>Display name</label><input id="pname" maxlength="24" placeholder="ZX OM FF"><label>Role</label><input id="prole" maxlength="24" placeholder="Administrator"><label>🎨 Premium colour palette</label><div class="sw palette"><button data-ac="#00D9FF" style="background:#00D9FF" aria-label="Ice cyan" title="Ice Cyan"></button><button data-ac="#8B5CF6" style="background:#8B5CF6" aria-label="Royal violet" title="Royal Violet"></button><button data-ac="#3B82F6" style="background:#3B82F6" aria-label="Electric blue" title="Electric Blue"></button><button data-ac="#10B981" style="background:#10B981" aria-label="Emerald" title="Emerald"></button><button data-ac="#F59E0B" style="background:#F59E0B" aria-label="Amber" title="Amber"></button><button data-ac="#F43F8E" style="background:#F43F8E" aria-label="Rose pink" title="Rose Pink"></button><button data-ac="#FB7185" style="background:#FB7185" aria-label="Coral" title="Coral"></button><button data-ac="#A3E635" style="background:#A3E635" aria-label="Lime" title="Lime"></button></div><p class="hint mt">💾 Profile name, role and accent colour are saved in this browser.</p></div></div></section>
 
 <section class="pg" id="p-settings"><div class="grid g2">
@@ -215,7 +215,8 @@ $('lclr').onclick=async()=>{if(!await ask('Clear logs?','All logs will be remove
 /* profile */
 const bUrl=()=>{const u=$('puid').value.trim();return u?bannerUrl(u):''};
 function genBanner(quiet){const u=$('puid').value.trim(),url=bUrl(),im=$('banimg');if(!url){if(!quiet)toast('Enter or auto-detect a UID first.','warn');return}$('banner_status').textContent='Loading…';$('banph').innerHTML='<span class="spin"></span> Fetching banner…';$('banph').hidden=false;im.hidden=true;im.onload=()=>{im.hidden=false;$('banph').hidden=true;$('banner_status').textContent='Banner ready';$('banner_status').className='pill ok'};im.onerror=()=>{$('banph').textContent='⚠️ Banner unavailable for this UID. Check the UID or API response.';im.hidden=true;$('banner_status').textContent='Unavailable';$('banner_status').className='pill bad'};im.src=url}
-$('pgen').onclick=()=>genBanner();$('puid').addEventListener('change',()=>{if(!$('pauto').checked)genBanner(true)});
+$('pgen').onclick=()=>genBanner();$('puid').addEventListener('change',()=>{if(!$('pauto').checked)genBanner(true)});$('pcopy').onclick=()=>bUrl()?copy(bUrl(),'Banner URL copied'):toast('Enter a UID first.','warn');
+$('pdl').onclick=async()=>{const u=bUrl();if(!u)return toast('Enter a UID first.','warn');try{const r=await fetch(u);if(!r.ok)throw 0;const a=document.createElement('a');a.href=URL.createObjectURL(await r.blob());a.download=`zxomff-banner-${$('puid').value.trim()}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}catch{window.open(u,'_blank');toast('Direct download is blocked by the banner server, so it opened in a new tab. Save it from there.','warn')}};
 $('pauto').onchange=()=>{if($('pauto').checked){if(S.active){$('puid').value=S.active;genBanner(true)}else if($('pnode').value){$('puid').value=$('pnode').value;genBanner(true)}}};
 $('pnode').onchange=e=>setActive(e.target.value);
 function applyProfile(){const n=$('pname').value.trim()||'ZX OM FF';$('mename').textContent=n;$('merole').textContent=$('prole').value.trim()||'Operator';$('meav').textContent=n.slice(0,2).toUpperCase();LS.set('zx_name',$('pname').value);LS.set('zx_role',$('prole').value)}
@@ -245,11 +246,26 @@ const sha=async t=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new T
 const DEF='8ec092ddb6d8e6add70af9fa8bd6a3eed4171e1355d14d00e6d005146f669dfc',curH=()=>LS.get('zx_pwh',DEF),noBack=e=>/Invalid server response|Failed to fetch|NetworkError|Load failed|Not Found|404/i.test(e.message||'');
 const sess=()=>{try{return sessionStorage.getItem('zx_ok')==='1'}catch{return false}};
 const setSess=v=>{try{v?sessionStorage.setItem('zx_ok','1'):sessionStorage.removeItem('zx_ok')}catch{}};
+// Remember this browser after the first successful login. This is a convenience
+// flag, not a server-issued security credential; it stays on this device until cleared.
+const deviceRemembered=()=>LS.get('zx_remember_device','0')==='1';
+const rememberDevice=()=>LS.set('zx_remember_device','1');
 function startApp(){if(started)return;started=true;loadStats();loadLogs();setInterval(loadStats,3000);setInterval(()=>{if(S.page==='term'||S.page==='core')loadLogs()},2000)}
 function showLogin(){$('login').classList.add('show');$('boot').classList.add('off')}
-async function checkAuth(){try{const j=await api('/api/auth/status');if(j.authenticated){$('login').classList.remove('show');startApp()}else showLogin()}catch(e){if(sess()){$('login').classList.remove('show');startApp()}else showLogin()}}
+async function checkAuth(){
+  try{
+    const j=await api('/api/auth/status');
+    if(j.authenticated||deviceRemembered()){
+      $('login').classList.remove('show');startApp();
+    }else showLogin();
+  }catch(e){
+    if(deviceRemembered()||sess()){
+      $('login').classList.remove('show');startApp();
+    }else showLogin();
+  }
+}
 let lb=false;$('lgo').onclick=async()=>{if(lb)return;const pw=$('lpw').value;if(!pw){$('lerr').textContent='Enter the password.';return}lb=true;$('lgo').innerHTML='<span class="spin"></span>';$('lerr').textContent='';
-try{try{await api('/api/auth/login','POST',{password:pw})}catch(e){if(!noBack(e))throw e;if(await sha(pw)!==curH())throw Error('Invalid password');setSess(1)}$('lpw').value='';$('login').classList.remove('show');toast('Logged in','ok');startApp()}catch(e){$('lerr').textContent=e.message||'Invalid password'}lb=false;$('lgo').textContent='Login'};
+try{try{await api('/api/auth/login','POST',{password:pw})}catch(e){if(!noBack(e))throw e;if(await sha(pw)!==curH())throw Error('Invalid password');setSess(1)}rememberDevice();$('lpw').value='';$('login').classList.remove('show');toast('Logged in — this device is remembered','ok');startApp()}catch(e){$('lerr').textContent=e.message||'Invalid password'}lb=false;$('lgo').textContent='Login'};
 $('lpw').onkeydown=e=>{if(e.key==='Enter')$('lgo').click()};$('lshow').onclick=()=>{const p=$('lpw');p.type=p.type==='password'?'text':'password';$('lshow').textContent=p.type==='password'?'Show':'Hide'};
 $('lout').onclick=async()=>{setSess(0);try{await api('/api/auth/logout','POST',{})}catch{}showLogin();toast('Logged out','info')};
 $('pwgo').onclick=async()=>{const key=$('pwkey').value,a=$('pw0').value,b=$('pw1').value,c=$('pw2').value,r=$('pwres');if(key!=='ZX_PASS_CHANGE_07')return r.textContent='Invalid authorization key.';if(b.length<6)return r.textContent='New password must be at least 6 characters.';if(b!==c)return r.textContent='Passwords do not match.';
@@ -276,7 +292,7 @@ applySet();renderHist();checkAuth();
 /* boot */
 setInterval(()=>{$('clock').textContent=new Date().toLocaleTimeString()},1000);$('clock').textContent=new Date().toLocaleTimeString();
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('cm').classList.remove('show');$('dm').classList.remove('show')}});
-startApp();setTimeout(()=>$('boot').classList.add('off'),2500);
+setTimeout(()=>$('boot').classList.add('off'),2500);
 
 
 /* Upload accounts.json */
